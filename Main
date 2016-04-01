@@ -7,6 +7,8 @@
 #define CSN_PIN 10
 // Create RF24 Object
 RF24 radio(CE_PIN, CSN_PIN);
+// Define potentiometer pin
+#define POT_PIN A0
 
 // MPU6050 Library and Declarations
 #include <I2Cdev.h>
@@ -27,8 +29,14 @@ MPU6050 mpu;
 Adafruit_MotorShield AFMS = Adafruit_MotorShield();
 Adafruit_DCMotor *rMotor = AFMS.getMotor(3);
 Adafruit_DCMotor *lMotor = AFMS.getMotor(4);
+Adafruit_DCMotor *pMotor = AFMS.getMotor(2);
 
 // Define Variables
+// Potentiometer variables
+uint16_t potValue;
+int pendulumTarget;
+int pMotorSpeed;
+
 // MPU6050 Variables
 // MPU control/status vars
 bool dmpReady = false;  // set true if DMP init was successful
@@ -74,7 +82,6 @@ int motorPitch;
 // ================================================================ //
 
 void setup() {
-  Serial.println(F("IT'S WORKING!"));
   //Initialize for motors
   initMotors();
   //Initialize for gyro
@@ -96,18 +103,20 @@ void setup() {
 void loop() {
   double Pitch_value = getPitch();
   double motorSpeed = map(Pitch_value, -50, 50, -255, 255);
-  /*// Start PID routine
+  // Start PID routine
   Input = getPitch();
   myPID.Compute();
-  double motorSpeed = Output;*/
-  /*// Print PID routine
+  motorSpeed = Output;
+  // Print PID routine
   Serial.print(F("Input= "));
   Serial.print(Input);
   Serial.print("\t");
   Serial.print(F("Output= "));
-  double motorSpeed = Output;
+  motorSpeed = Output;
   printDouble(Output, 100);
-  Serial.println();*/
+  Serial.println();
+  // Read potentiometer
+  potValue = analogRead(POT_PIN);
 
   // RF24 communication and control
   if ( radio.available())
@@ -149,27 +158,37 @@ void loop() {
     // Print values from controller
     Serial.print(F("X1= "));
     Serial.print(motorTurn);
-    Serial.print("   \t");
+    Serial.print("  \t");
     Serial.print(F("Y1= "));
     Serial.print(motorPitch);
-    Serial.print("   \t");
-    Serial.print(F("X1_raw= "));
-    Serial.print(myData.X1_pos);
-    Serial.print("   \t");
-    Serial.print(F("Y1_raw= "));
-    Serial.print(myData.Y1_pos);
-    Serial.print("   \t");
-    /*// Print values from PID
+    Serial.print("  \t");
+    // Print values from PID
     Serial.print(F("Input= "));
     Serial.print(Input);
     Serial.print("\t");
     Serial.print(F("Output= "));
     printDouble(Output, 100);
-    Serial.println();*/
+    Serial.println();
     // Print motorSpeed
     Serial.print(F("Motors= "));
     printDouble(motorSpeed, 100);
     Serial.println();
+    
+    // Set position of the pendulum
+    pendulumTarget = map(motorPitch, -255, 255, 215, 819);
+    pMotorSpeed = pendulumTarget - potValue;
+    if(pMotorSpeed > 0){
+      pMotor->run(FORWARD);
+      pMotor->setSpeed(pMotorSpeed);
+    }
+    else if(pMotorSpeed < 0){
+      pMotor->run(BACKWARD);
+      pMotor->setSpeed(-pMotorSpeed);
+    }
+    else{
+      pMotor->run(RELEASE);
+    }
+    
     
     // Start Movement Routine
     // Forward/Backwards
@@ -411,7 +430,7 @@ void initRF24(void){
 
   // Open a writing and reading pipe on each radio, with opposite addresses
   radio.openWritingPipe(addresses[1]);
-  radio.openReadingPipe(1, addresses[0]); 
+  radio.openReadingPipe(1, addresses[0]);
   
   // Start the radio listening for data
   radio.startListening();
@@ -431,4 +450,7 @@ void initMotors(void){
   lMotor->setSpeed(150);
   lMotor->run(FORWARD);
   lMotor->run(RELEASE);
+  pMotor->setSpeed(150);
+  pMotor->run(FORWARD);
+  pMotor->run(RELEASE);
 }
